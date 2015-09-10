@@ -7,6 +7,9 @@
 #include "fcntl.h"
 
 #define BUFSIZE 8096
+void procesarConsulta(int fd);
+
+
 
 int main(int argc, char ** argv){
     //arg1 puerto
@@ -29,7 +32,7 @@ int main(int argc, char ** argv){
     }
 
     int puerto = atoi(argv[1]);
-    int listenfd,socketfd;
+    int listenfd,socketfd,fd;
 
     if((listenfd = socket(AF_INET, SOCK_STREAM,0)) <0) {
         printf("\nOcurrio un error creado el socket\n");
@@ -52,71 +55,82 @@ int main(int argc, char ** argv){
     }
 
 
+    //FIFO
+    if(modo == 1) {
+        create(); //crear la cola
 
-    //FIFO EMPIEZA AQUI
-    create(); //crear la cola
-
-    for(;;){
-        length = sizeof(cli_addr);
-        if((socketfd = accept(listenfd, (struct sockaddr *)&cli_addr, &length)) < 0) {
-            printf("\nOcurrio un error mientras se escuchaban conexiones");
-        }
-        else{
-
-            printf("\nSe encolo: %d\n",socketfd);
-            enq(socketfd);
-            int fd = deq();
-            int file_fd;
-            printf("\nSe desencolo: %d\n",fd);
-            long i, ret, len;
-            char * fstr;
-            static char buffer[BUFSIZE+1];
-            ret = read(fd,buffer,BUFSIZE);
-
-            printf("\nConsulta : %s\n",buffer);
-
-
-            if(ret > 0 && ret < BUFSIZE)
-                buffer[ret]=0;
-            else buffer[0]=0;
-            for(i=0;i<ret;i++)
-                if(buffer[i] == '\r' || buffer[i] == '\n')
-                    buffer[i]='*';
-            for(i=4;i<BUFSIZE;i++) {
-                if(buffer[i] == ' ') {
-                    buffer[i] = 0;
-                    break;
-                }
+        for (;;) {
+            length = sizeof(cli_addr);
+            if ((socketfd = accept(listenfd, (struct sockaddr *) &cli_addr, &length)) < 0) {
+                printf("\nOcurrio un error mientras se escuchaban conexiones");
             }
+            else {
 
-            if ((file_fd = open(&buffer[5], O_RDONLY)) == -1) {
-                (void) write(fd,
-                             "HTTP/1.1 404 Not Found\nContent-Length: 136\nContent-Type: text/html\n\n<html><head>\n<title>404 Not Found</title>\n</head><body>\n<h1>Not Found</h1>\nThe requested URL was not found on this server.\n</body></html>\n",
-                             224);
-                close(fd);
-                exit(0);
+                // PROCESO DE FIFO
+                printf("\nSe agrego una consulta en la cola de espera");
+                enq(socketfd);
+                fd = deq();
+                printf("\nSe desencolo una consulta en la cola de espera");
+                // FINAL PROCESO DE FIFO
+                procesarConsulta(fd);
+
             }
-
-            printf("\nConsulta despues : %s\n",buffer);
-
-            fstr=" application/octet-stream";
-            len = (long)lseek(file_fd, (off_t)0, SEEK_END); /* lseek to the file end to find the length */
-            (void)lseek(file_fd, (off_t)0, SEEK_SET); /* lseek back to the file start ready for reading */
-            (void)sprintf(buffer,"HTTP/1.1 200 OK\nServer: "
-                    "ServidorHTTP/1.0\nContent-Length: %ld\n"
-                    "\nContent-Type: %s\n\n", len, fstr);
-            (void)write(fd,buffer,strlen(buffer));
-
-
-
-            while (	(ret = read(file_fd, buffer, BUFSIZE)) > 0 ) {
-                (void)write(fd,buffer,ret);
-            }
-            sleep(1);	/* allow socket to drain before signalling the socket is closed */
-            close(fd);
-
         }
     }
 
+    else if(modo ==2 ){
+
+
+
+
+    }
+
     return 0;
+}
+
+void procesarConsulta(int fd) {
+    long i, ret, len;
+    char *fstr;
+    int file_fd;
+    static char buffer[BUFSIZE + 1];
+    ret = read(fd, buffer, BUFSIZE);
+
+    if (ret > 0 && ret < BUFSIZE)
+        buffer[ret] = 0;
+    else buffer[0] = 0;
+    for (i = 0; i < ret; i++)
+        if (buffer[i] == '\r' || buffer[i] == '\n')
+            buffer[i] = '*';
+    for (i = 4; i < BUFSIZE; i++) {
+        if (buffer[i] == ' ') {
+            buffer[i] = 0;
+            break;
+        }
+    }
+
+    if ((file_fd = open(&buffer[5], O_RDONLY)) == -1) {
+        (void) write(fd,
+                     "HTTP/1.1 404 Not Found\nContent-Length: 136\nContent-Type: text/html\n\n<html><head>\n<title>404 Not Found</title>\n</head><body>\n<h1>Not Found</h1>\nThe requested URL was not found on this server.\n</body></html>\n",
+                     224);
+        close(fd);
+    }
+
+
+    fstr = "binary";//" application/octet-stream";
+    len = (long) lseek(file_fd, (off_t) 0, SEEK_END); // ir al final del archivo para saber el tamano
+    (void) lseek(file_fd, (off_t) 0, SEEK_SET);     // volver al inicio
+    (void) sprintf(buffer, "HTTP/1.1 200 OK\nServer: "
+            "ServidorHTTP/1.0\nContent-Length: %ld\n"
+            "Content-Type: %s\n\n", len, fstr);
+    (void) write(fd, buffer, strlen(buffer));
+
+
+    while ((ret = read(file_fd, buffer, BUFSIZE)) > 0) {
+        (void) write(fd, buffer, ret);
+    }
+    sleep(1);
+    close(fd);
+
+
+
 }
