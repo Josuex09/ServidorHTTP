@@ -81,7 +81,7 @@ int main(int argc, char ** argv){
             }
         }
     }
-
+        //FORKED
     else if(modo ==2 ){
         int pid;
         (void)signal(SIGCLD, SIG_IGN); /* ignore child death */
@@ -106,6 +106,7 @@ int main(int argc, char ** argv){
             }
         }
     }
+        //THREADED
     else if(modo == 3){
 
         for(;;){
