@@ -5,10 +5,12 @@
 #include "netinet/in.h"
 #include "string.h"
 #include "fcntl.h"
-#include <signal.h>
+#include "signal.h"
+#include "pthread.h"
+
 
 #define BUFSIZE 8096
-void procesarConsulta(int fd);
+void* procesarConsulta(void* fd);
 
 
 
@@ -73,7 +75,7 @@ int main(int argc, char ** argv){
                 fd = deq();
                 printf("\nSe desencolo una consulta en la cola de espera");
                 // FINAL PROCESO DE FIFO
-                procesarConsulta(fd);
+                procesarConsulta((void *)&fd);
                 close(socketfd);
 
             }
@@ -95,7 +97,7 @@ int main(int argc, char ** argv){
                     printf("\nHa ocurrido un error creado el proceso\n");
                 }
                 else if (pid == 0) {
-                    procesarConsulta(socketfd);
+                    procesarConsulta((void *)&socketfd);
                     exit(0);
                 }
                 else {
@@ -104,11 +106,25 @@ int main(int argc, char ** argv){
             }
         }
     }
+    else if(modo == 3){
+
+        for(;;){
+            length = sizeof(cli_addr);
+            if ((socketfd = accept(listenfd, (struct sockaddr *) &cli_addr, &length)) < 0) {
+                printf("\nOcurrio un error mientras se escuchaban conexiones");
+            }
+            else{
+                pthread_t hilo ;
+                pthread_create(&hilo,NULL,procesarConsulta,(void*)&socketfd);
+            }
+        }
+    }
 
     return 0;
 }
 
-void procesarConsulta(int fd) {
+void* procesarConsulta(void* fd_t) {
+    int fd = *((int *) fd_t);
     long i, ret, len;
     char *fstr;
     int file_fd;
@@ -150,6 +166,7 @@ void procesarConsulta(int fd) {
     }
     sleep(1);
     close(fd);
+    return NULL;
 
 
 
