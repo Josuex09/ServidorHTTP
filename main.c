@@ -21,12 +21,7 @@ int main(int argc, char ** argv){
     // si arg3 = 4 o 5 , arg4 k procesos que van a correr
 
     int modo = atoi(argv[3]);
-
-    if((modo == 4 || modo ==5) && argc != 5){
-        printf("\nLa forma correcta de correrlo es: ServidorHTTP puerto ruta modo\nSi el modo es 3(Pre-forked) o 4(Pre-threaded) se agrega un cuarto de los k procesos que van a correr \nEjemplo: ServidorHTTP 8081 temp/wwwroot 2\n");
-        exit(0);
-    }
-    else if(modo <0 || modo > 3 || argc !=4){
+    if( ((modo == 4 || modo ==5) && argc != 5) || ( (modo ==1 || modo ==2 || modo ==3 ) && argc !=4)){
         printf("\nLa forma correcta de correrlo es: ServidorHTTP puerto ruta modo\nSi el modo es 3(Pre-forked) o 4(Pre-threaded) se agrega un cuarto de los k procesos que van a correr \nEjemplo: ServidorHTTP 8081 temp/wwwroot 2\n");
         exit(0);
     }
@@ -76,7 +71,7 @@ int main(int argc, char ** argv){
                 printf("\nSe desencolo una consulta en la cola de espera");
                 // FINAL PROCESO DE FIFO
                 procesarConsulta((void *)&fd);
-                close(socketfd);
+                close(fd);
 
             }
         }
@@ -119,6 +114,74 @@ int main(int argc, char ** argv){
                 pthread_create(&hilo,NULL,procesarConsulta,(void*)&socketfd);
             }
         }
+    }
+    // PRE-FORKED
+    else if(modo == 4){
+        int pid;
+        int k = atoi(argv[4]);
+
+        (void)signal(SIGCLD, SIG_IGN); /* ignore child death */
+        (void)signal(SIGHUP, SIG_IGN); /* ignore terminal hangups */
+
+        for(;;){
+
+            length = sizeof(cli_addr);
+            if ((socketfd = accept(listenfd, (struct sockaddr *) &cli_addr, &length)) < 0) {
+                printf("\nOcurrio un error mientras se escuchaban conexiones");
+            }
+            else{
+                enq(socketfd);
+                if(queuesize() > k){
+                    printf("\nSe supero el limite, hay %d consultas, esperemos por que un cliente se libere\n",queuesize());
+                }
+                else {
+                    printf("\n%d procesos corriendo...\n",queuesize());
+                    fd = frontelement();
+                    pid = fork();
+                    if (pid < 0) {
+                        printf("\nHa ocurrido un error creado el proceso\n");
+                    }
+                    else if (pid == 0) {
+                        procesarConsulta((void *)&fd);
+                        printf("\nSe libero un proceso, en la cola quedan %d \n",queuesize()-1);
+                        close(fd);
+                        exit(0);
+                    }
+                    else {
+                        close(fd);
+                    }
+                    deq();
+                }
+            }
+
+            }
+        }
+    else if(modo == 5){
+
+        int k = atoi(argv[4]);
+        create();
+
+        for(;;){
+            length = sizeof(cli_addr);
+            if ((socketfd = accept(listenfd, (struct sockaddr *) &cli_addr, &length)) < 0) {
+                printf("\nOcurrio un error mientras se escuchaban conexiones");
+            }
+            else if(socketfd>=0 || queuesize() >0){
+                enq(socketfd);
+                if(queuesize() <= k ) {
+                    printf("\n%d tamano de la cola\n",queuesize());
+                    int fd = frontelement();
+                    pthread_t hilo;
+                    pthread_create(&hilo, NULL, procesarConsulta, (void *) &fd);
+                }
+                else{
+                    printf("\nSe llego al limite, hay %d en la cola\n",queuesize());
+                }
+            }
+
+        }
+
+
     }
 
     return 0;
@@ -167,6 +230,8 @@ void* procesarConsulta(void* fd_t) {
     }
     sleep(1);
     close(fd);
+    deq();
+    printf("\n%d quedan en la cola\n",queuesize());
     return NULL;
 
 
