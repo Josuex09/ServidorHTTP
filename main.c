@@ -11,6 +11,11 @@
 
 #define BUFSIZE 8096
 void* procesarConsulta(void* fd);
+int modo;
+int puerto;
+
+int hilosUsados =0; // Para modo 5
+
 
 
 
@@ -20,7 +25,7 @@ int main(int argc, char ** argv){
     //arg3 numero del modo
     // si arg3 = 4 o 5 , arg4 k procesos que van a correr
 
-    int modo = atoi(argv[3]);
+    modo = atoi(argv[3]);
     if( ((modo == 4 || modo ==5) && argc != 5) || ( (modo ==1 || modo ==2 || modo ==3 ) && argc !=4)){
         printf("\nLa forma correcta de correrlo es: ServidorHTTP puerto ruta modo\nSi el modo es 3(Pre-forked) o 4(Pre-threaded) se agrega un cuarto de los k procesos que van a correr \nEjemplo: ServidorHTTP 8081 temp/wwwroot 2\n");
         exit(0);
@@ -29,7 +34,7 @@ int main(int argc, char ** argv){
         printf("\nError con la ruta %s verifiquela y vuelva a intentarlo\n",argv[2]);
     }
 
-    int puerto = atoi(argv[1]);
+    puerto = atoi(argv[1]);
     int listenfd,socketfd,fd;
 
     if((listenfd = socket(AF_INET, SOCK_STREAM,0)) <0) {
@@ -116,49 +121,29 @@ int main(int argc, char ** argv){
         }
     }
     // PRE-FORKED
-    else if(modo == 4){
+    else if(modo == 4) {
         int pid;
         int k = atoi(argv[4]);
 
-        (void)signal(SIGCLD, SIG_IGN); /* ignore child death */
-        (void)signal(SIGHUP, SIG_IGN); /* ignore terminal hangups */
+        (void) signal(SIGCLD, SIG_IGN); /* ignore child death */
+        (void) signal(SIGHUP, SIG_IGN); /* ignore terminal hangups */
 
-        for(;;){
+        for (; ;) {
 
             length = sizeof(cli_addr);
             if ((socketfd = accept(listenfd, (struct sockaddr *) &cli_addr, &length)) < 0) {
                 printf("\nOcurrio un error mientras se escuchaban conexiones");
             }
-            else{
-                enq(socketfd);
-                if(queuesize() > k){
-                    printf("\nSe supero el limite, hay %d consultas, esperemos por que un cliente se libere\n",queuesize());
-                }
-                else {
-                    printf("\n%d procesos corriendo...\n",queuesize());
-                    fd = frontelement();
-                    pid = fork();
-                    if (pid < 0) {
-                        printf("\nHa ocurrido un error creado el proceso\n");
-                    }
-                    else if (pid == 0) {
-                        procesarConsulta((void *)&fd);
-                        printf("\nSe libero un proceso, en la cola quedan %d \n",queuesize()-1);
-                        close(fd);
-                        exit(0);
-                    }
-                    else {
-                        close(fd);
-                    }
-                    deq();
-                }
-            }
+            else {
 
             }
         }
+    }
+        //PRE-THREADED
     else if(modo == 5){
+        int k = atoi(argv[4]); // cant de hilos
+       // int hilosUsados = 0;
 
-        int k = atoi(argv[4]);
         create();
 
         for(;;){
@@ -166,19 +151,17 @@ int main(int argc, char ** argv){
             if ((socketfd = accept(listenfd, (struct sockaddr *) &cli_addr, &length)) < 0) {
                 printf("\nOcurrio un error mientras se escuchaban conexiones");
             }
-            else if(socketfd>=0 || queuesize() >0){
-                enq(socketfd);
-                if(queuesize() <= k ) {
-                    printf("\n%d tamano de la cola\n",queuesize());
-                    int fd = frontelement();
-                    pthread_t hilo;
-                    pthread_create(&hilo, NULL, procesarConsulta, (void *) &fd);
-                }
-                else{
-                    printf("\nSe llego al limite, hay %d en la cola\n",queuesize());
-                }
-            }
+            else if(hilosUsados<k){
+                hilosUsados++;
+                printf("\nLlego una consulta y se estan usando %d hilos\n",hilosUsados);
+                pthread_t hilo ;
+                pthread_create(&hilo,NULL,procesarConsulta,(void*)&socketfd);
 
+            }
+            else if(hilosUsados>=k){
+                    enq(socketfd);
+                    printf("\nSe encolo el %d\n",socketfd);
+                }
         }
 
 
@@ -186,6 +169,8 @@ int main(int argc, char ** argv){
 
     return 0;
 }
+
+
 
 void* procesarConsulta(void* fd_t) {
     int fd = *((int *) fd_t);
@@ -209,17 +194,18 @@ void* procesarConsulta(void* fd_t) {
     }
 
     if ((file_fd = open(&buffer[5], O_RDONLY)) == -1) {
+
         (void) write(fd,
                      "HTTP/1.1 404 Not Found\nContent-Length: 136\nContent-Type: text/html\n\n<html><head>\n<title>404 Not Found</title>\n</head><body>\n<h1>Not Found</h1>\nThe requested URL was not found on this server.\n</body></html>\n",
-                     224);
-        close(fd);
+                     207);
+        goto final; // IR AL FINAL, SI ES MODO 5 PUEDEN HABER HILOS ESPERANDO
     }
 
 
     fstr = "binary";//" application/octet-stream";
     len = (long) lseek(file_fd, (off_t) 0, SEEK_END); // ir al final del archivo para saber el tamano
     (void) lseek(file_fd, (off_t) 0, SEEK_SET);     // volver al inicio
-    (void) sprintf(buffer, "HTTP/1.1 200 OK\nServer: "
+       (void) sprintf(buffer, "HTTP/1.1 200 OK\nServer: "
             "ServidorHTTP/1.0\nContent-Length: %ld\n"
             "Content-Type: %s\n\n", len, fstr);
     (void) write(fd, buffer, strlen(buffer));
@@ -228,10 +214,26 @@ void* procesarConsulta(void* fd_t) {
     while ((ret = read(file_fd, buffer, BUFSIZE)) > 0) {
         (void) write(fd, buffer, ret);
     }
+
+
+    final: // VENIR AQUI CUANDO ENCUENTRA O NO EL ARCHIVO
+
     sleep(1);
     close(fd);
-    deq();
-    printf("\n%d quedan en la cola\n",queuesize());
+
+    if(modo == 5){
+        if(queuesize()>0){
+            fd = deq();
+            printf("\nSe saco de la cola %d\n",fd);
+            procesarConsulta((void*)&fd);
+
+        }
+        else {
+            hilosUsados--;
+            printf("\nHilo liberado quedan %d usados\n",hilosUsados);
+        }
+
+    }
     return NULL;
 
 
