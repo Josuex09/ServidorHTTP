@@ -18,15 +18,16 @@ pthread_cond_t	cond;
 
 
 void prethreaded(socklen_t length,int socketfd,int listenfd,struct sockaddr_in cli_addr,int k){
-
     int *hiloActual;
     hilos = calloc(k,sizeof(pthread_t));
     int i;
     for (i = 0; i < k; i++) {
         hiloActual = malloc(sizeof(int));
         *hiloActual = i;
-        if (pthread_create(&hilos[0].id, NULL, &procesarThread, (void *) hiloActual))
+        if (pthread_create(&hilos[i].id, NULL, &procesarThread, (void *) hiloActual)) {
             printf("Error creando el pthread");
+            exit(0);
+        }
     }
 
     obtenida = procesada = 0;
@@ -51,9 +52,7 @@ void prethreaded(socklen_t length,int socketfd,int listenfd,struct sockaddr_in c
 void *procesarThread(void *args){
     int socket;
     free(args);
-
     pthread_detach(pthread_self());
-
     while(1){
         pthread_mutex_lock(&mutex);
         while (obtenida == procesada)
@@ -63,8 +62,7 @@ void *procesarThread(void *args){
             obtenida = 0;
         pthread_mutex_unlock(&mutex);
         procesarConsulta((void*)&socket);
-        close(socket);
 
     }
-    return 0;
+    return NULL;
 }
