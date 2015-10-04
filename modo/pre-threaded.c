@@ -3,7 +3,7 @@
 //
 
 #include "pre-threaded.h"
-
+#define MAX 1000
 typedef struct {  // Tipo para mantener los hilos
     pthread_t id;
 } Hilo;
@@ -11,7 +11,7 @@ typedef struct {  // Tipo para mantener los hilos
 Hilo * hilos; // arreglo de hilos
 
 int	obtenida, procesada;
-int consultas[32];
+int consultas[MAX];
 
 pthread_mutex_t	mutex;
 pthread_cond_t	cond;
@@ -38,7 +38,7 @@ void prethreaded(socklen_t length,int socketfd,int listenfd,struct sockaddr_in c
         }
         pthread_mutex_lock(&mutex);
         consultas[procesada] = socketfd;
-        if (++procesada == 32)
+        if (++procesada == MAX)
             procesada = 0;
         if (procesada == obtenida)
             printf("\nError \n");
@@ -59,10 +59,10 @@ void *procesarThread(void *args){
         while (obtenida == procesada)
             pthread_cond_wait(&cond, &mutex);
         socket = consultas[obtenida];	/* connected socket to service */
-        if (++obtenida == 32)
+        if (++obtenida == MAX)
             obtenida = 0;
-        pthread_mutex_unlock(&mutex);
         procesarConsulta((void*)&socket);
+        pthread_mutex_unlock(&mutex);
         close(socket);
 
     }

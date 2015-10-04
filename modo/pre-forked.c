@@ -11,6 +11,7 @@ void preforked(socklen_t length,int socketfd,int listenfd,struct sockaddr_in cli
     cantHijos = k;
     pids = calloc(cantHijos, sizeof(pid_t));
     pid_t pidAct;
+
     int i;
     for (i = 0; i < k; i++) {
         pidAct = fork();

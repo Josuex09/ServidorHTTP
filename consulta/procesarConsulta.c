@@ -32,13 +32,14 @@ void* procesarConsulta(void* fd_t) {
     }
 
     if ((file_fd = open(&buffer[5], O_RDONLY)) == -1) {
-
         (void) write(fd,
                      "HTTP/1.1 404 Not Found\nContent-Length: 136\nContent-Type: text/html\n\n<html><head>\n<title>404 Not Found</title>\n</head><body>\n<h1>Not Found</h1>\nThe requested URL was not found on this server.\n</body></html>\n",
                      207);
+        printf("\nHa llegado una nueva consulta solicitando el recurso %s pero no se encontro\n",&buffer[5]);
         goto final; // IR AL FINAL, SI ES MODO 5 PUEDEN HABER HILOS ESPERANDO
     }
 
+    printf("\nHa llegado una nueva consulta solicitando el recurso %s\n",&buffer[5]);
     fstr = "binary";//" application/octet-stream";
     len = (long) lseek(file_fd, (off_t) 0, SEEK_END); // ir al final del archivo para saber el tamano
     (void) lseek(file_fd, (off_t) 0, SEEK_SET);     // volver al inicio
