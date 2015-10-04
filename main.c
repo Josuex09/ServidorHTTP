@@ -19,6 +19,7 @@ int main(int argc, char ** argv){
     // si arg3 = 4 o 5 , arg4 k procesos que van a correr
 
     modo = atoi(argv[3]);
+
     if( ((modo == 4 || modo ==5) && argc != 5) || ( (modo ==1 || modo ==2 || modo ==3 ) && argc !=4)){
         printf("\nLa forma correcta de correrlo es: ServidorHTTP puerto ruta modo\nSi el modo es 3(Pre-forked) o 4(Pre-threaded) se agrega un cuarto de los k procesos que van a correr \nEjemplo: ServidorHTTP 8081 temp/wwwroot 2\n");
         exit(0);
